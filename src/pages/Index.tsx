@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Header from '@/components/Header';
 import SecretInput from '@/components/SecretInput';
 import SecretFeed from '@/components/SecretFeed';
@@ -8,16 +8,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const REACTIONS_KEY = 'lovisec-reactions';
+const SECRETS_PER_PAGE = 10;
 
 const Index = () => {
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [userReactions, setUserReactions] = useState<Record<string, ReactionType>>(() => {
     const saved = localStorage.getItem(REACTIONS_KEY);
     return saved ? JSON.parse(saved) : {};
   });
+  const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Load secrets from database
+  // Load initial secrets from database
   useEffect(() => {
     loadSecrets();
   }, []);
@@ -68,14 +72,17 @@ const Index = () => {
 
   const loadSecrets = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('secrets')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(SECRETS_PER_PAGE);
 
       if (error) throw error;
 
-      setSecrets((data || []) as Secret[]);
+      const secretsData = (data || []) as Secret[];
+      setSecrets(secretsData);
+      setHasMore(secretsData.length === SECRETS_PER_PAGE);
     } catch (error) {
       console.error('Error loading secrets:', error);
       toast.error('Error al cargar los secretos');
@@ -84,9 +91,56 @@ const Index = () => {
     }
   };
 
+  const loadMoreSecrets = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('secrets')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(secrets.length, secrets.length + SECRETS_PER_PAGE - 1);
+
+      if (error) throw error;
+
+      const newSecrets = (data || []) as Secret[];
+      setSecrets((prev) => [...prev, ...newSecrets]);
+      setHasMore(newSecrets.length === SECRETS_PER_PAGE);
+    } catch (error) {
+      console.error('Error loading more secrets:', error);
+      toast.error('Error al cargar más secretos');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, secrets.length]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          loadMoreSecrets();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [loadMoreSecrets, hasMore, loadingMore]);
+
   const handleSubmitSecret = async (content: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('secrets')
         .insert({
           content,
@@ -121,7 +175,7 @@ const Index = () => {
         newReactions[reaction] = newReactions[reaction] + 1;
       }
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('secrets')
         .update({ reactions: newReactions })
         .eq('id', secretId);
@@ -179,6 +233,13 @@ const Index = () => {
           <main className="container mx-auto pb-16">
             <SecretInput onSubmit={handleSubmitSecret} />
             <SecretFeed secrets={secretsWithReactions} onReact={handleReact} />
+            {hasMore && (
+              <div ref={observerTarget} className="w-full py-8 flex justify-center">
+                {loadingMore && (
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                )}
+              </div>
+            )}
           </main>
         </div>
       </div>

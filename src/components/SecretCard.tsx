@@ -21,9 +21,9 @@ const SecretCard = ({ secret, onReact }: SecretCardProps) => {
   };
 
   return (
-    <div className="card-gradient rounded-2xl p-6 border border-border/50 animate-slide-up hover:scale-[1.02] transition-all duration-300">
+    <div className="card-gradient rounded-2xl p-4 sm:p-6 border border-border/50 animate-slide-up hover:scale-[1.02] transition-all duration-300">
       <div className="relative">
-        <p className="text-foreground leading-relaxed whitespace-pre-wrap mb-4">
+        <p className="text-foreground text-base sm:text-base leading-relaxed whitespace-pre-wrap mb-4">
           {secret.content}
         </p>
         

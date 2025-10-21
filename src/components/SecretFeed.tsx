@@ -23,7 +23,7 @@ const SecretFeed = ({ secrets, onReact }: SecretFeedProps) => {
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <div className="w-full max-w-3xl mx-auto px-2 sm:px-4 py-4 sm:py-8 space-y-3 sm:space-y-6">
       {secrets.map((secret) => (
         <SecretCard
           key={secret.id}

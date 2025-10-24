@@ -29,6 +29,12 @@ const CommentSection = ({ secretId }: CommentSectionProps) => {
   });
 
   useEffect(() => {
+    // Cargar comentarios al montar / cuando cambia secretId para que el contador
+    // (comments.length) esté disponible antes de hacer click en "Mostrar comentarios"
+    loadComments();
+  }, [secretId]);
+
+  useEffect(() => {
     if (showComments) {
       loadComments();
     }

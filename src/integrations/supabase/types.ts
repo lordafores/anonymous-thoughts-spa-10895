@@ -14,13 +14,168 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      comments: {
+        Row: {
+          content: string
+          created_at: string
+          encrypted_content: string | null
+          id: string
+          image_url: string | null
+          reactions: Json
+          secret_id: string
+          user_id: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          encrypted_content?: string | null
+          id?: string
+          image_url?: string | null
+          reactions?: Json
+          secret_id: string
+          user_id?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          encrypted_content?: string | null
+          id?: string
+          image_url?: string | null
+          reactions?: Json
+          secret_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_secret_id_fkey"
+            columns: ["secret_id"]
+            isOneToOne: false
+            referencedRelation: "secrets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_secret_id_fkey"
+            columns: ["secret_id"]
+            isOneToOne: false
+            referencedRelation: "trending_secrets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_seed: string
+          created_at: string
+          id: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          avatar_seed: string
+          created_at?: string
+          id: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          avatar_seed?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      secrets: {
+        Row: {
+          category: string | null
+          content: string
+          created_at: string
+          encrypted_content: string | null
+          id: string
+          image_url: string | null
+          reactions: Json
+          user_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          content: string
+          created_at?: string
+          encrypted_content?: string | null
+          id?: string
+          image_url?: string | null
+          reactions?: Json
+          user_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          content?: string
+          created_at?: string
+          encrypted_content?: string | null
+          id?: string
+          image_url?: string | null
+          reactions?: Json
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "secrets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      secrets_stats: {
+        Row: {
+          total_categories: number | null
+          total_impresionante: number | null
+          total_no_me_gusta: number | null
+          total_secrets: number | null
+          total_turbio: number | null
+        }
+        Relationships: []
+      }
+      trending_secrets: {
+        Row: {
+          category: string | null
+          content: string | null
+          created_at: string | null
+          id: string | null
+          reactions: Json | null
+          total_reactions: number | null
+        }
+        Insert: {
+          category?: string | null
+          content?: string | null
+          created_at?: string | null
+          id?: string | null
+          reactions?: Json | null
+          total_reactions?: never
+        }
+        Update: {
+          category?: string | null
+          content?: string | null
+          created_at?: string | null
+          id?: string | null
+          reactions?: Json | null
+          total_reactions?: never
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      generate_random_username: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never

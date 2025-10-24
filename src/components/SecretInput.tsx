@@ -3,19 +3,21 @@ import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import ImageUpload from './ImageUpload';
 
 interface SecretInputProps {
-  onSubmit: (content: string) => void;
+  onSubmit: (content: string, imageFile?: File | null) => void;
 }
 
 const SecretInput = ({ onSubmit }: SecretInputProps) => {
   const [content, setContent] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!content.trim()) {
-      toast.error('Escribe algo antes de publicar');
+    if (!content.trim() && !imageFile) {
+      toast.error('Escribe algo o sube una imagen antes de publicar');
       return;
     }
 
@@ -24,8 +26,9 @@ const SecretInput = ({ onSubmit }: SecretInputProps) => {
       return;
     }
 
-    onSubmit(content.trim());
+    onSubmit(content.trim(), imageFile);
     setContent('');
+    setImageFile(null);
     toast.success('¡Secreto publicado!');
   };
 
@@ -49,9 +52,15 @@ const SecretInput = ({ onSubmit }: SecretInputProps) => {
           />
           
           <div className="flex items-center justify-between mt-4">
-            <span className="text-xs text-muted-foreground">
-              {content.length}/500 caracteres
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">
+                {content.length}/500 caracteres
+              </span>
+              <ImageUpload
+                onImageSelect={setImageFile}
+                onImageRemove={() => setImageFile(null)}
+              />
+            </div>
             
             <Button
               type="submit"

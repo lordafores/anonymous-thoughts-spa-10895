@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import SecretInput from '@/components/SecretInput';
 import SecretFeed from '@/components/SecretFeed';
 import { Secret, ReactionType } from '@/types/secret';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { encryptData, decryptData } from '@/utils/encryption';
+import { Button } from '@/components/ui/button';
+import { LogIn } from 'lucide-react';
 
 const REACTIONS_KEY = 'lovisec-reactions';
 const SECRETS_PER_PAGE = 10;
@@ -20,44 +25,34 @@ const Index = () => {
     return saved ? JSON.parse(saved) : {};
   });
   const observerTarget = useRef<HTMLDivElement>(null);
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
 
-  // Load initial secrets from database
   useEffect(() => {
-    loadSecrets();
-  }, []);
+    if (!authLoading) {
+      loadSecrets();
+    }
+  }, [authLoading]);
 
-  // Subscribe to realtime updates
   useEffect(() => {
     const channel = supabase
       .channel('secrets-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'secrets'
-        },
-        (payload) => {
-          const newSecret = payload.new as Secret;
-          setSecrets((prev) => [newSecret, ...prev]);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'secrets'
-        },
-        (payload) => {
-          const updatedSecret = payload.new as Secret;
-          setSecrets((prev) =>
-            prev.map((secret) =>
-              secret.id === updatedSecret.id ? updatedSecret : secret
-            )
-          );
-        }
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'secrets' }, (payload) => {
+        const newSecret = payload.new as any;
+        const decryptedSecret: Secret = {
+          ...newSecret,
+          content: newSecret.encrypted_content ? decryptData(newSecret.encrypted_content) : newSecret.content,
+        };
+        setSecrets((prev) => [decryptedSecret, ...prev]);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'secrets' }, (payload) => {
+        const updatedSecret = payload.new as any;
+        const decryptedSecret: Secret = {
+          ...updatedSecret,
+          content: updatedSecret.encrypted_content ? decryptData(updatedSecret.encrypted_content) : updatedSecret.content,
+        };
+        setSecrets((prev) => prev.map((secret) => secret.id === decryptedSecret.id ? decryptedSecret : secret));
+      })
       .subscribe();
 
     return () => {
@@ -65,7 +60,6 @@ const Index = () => {
     };
   }, []);
 
-  // Save user reactions to localStorage
   useEffect(() => {
     localStorage.setItem(REACTIONS_KEY, JSON.stringify(userReactions));
   }, [userReactions]);
@@ -74,13 +68,17 @@ const Index = () => {
     try {
       const { data, error } = await (supabase as any)
         .from('secrets')
-        .select('*')
+        .select('*, profile:profiles(*)')
         .order('created_at', { ascending: false })
         .limit(SECRETS_PER_PAGE);
 
       if (error) throw error;
 
-      const secretsData = (data || []) as Secret[];
+      const secretsData = ((data || []) as any[]).map((secret) => ({
+        ...secret,
+        content: secret.encrypted_content ? decryptData(secret.encrypted_content) : secret.content,
+      }));
+      
       setSecrets(secretsData);
       setHasMore(secretsData.length === SECRETS_PER_PAGE);
     } catch (error) {
@@ -98,13 +96,17 @@ const Index = () => {
     try {
       const { data, error } = await (supabase as any)
         .from('secrets')
-        .select('*')
+        .select('*, profile:profiles(*)')
         .order('created_at', { ascending: false })
         .range(secrets.length, secrets.length + SECRETS_PER_PAGE - 1);
 
       if (error) throw error;
 
-      const newSecrets = (data || []) as Secret[];
+      const newSecrets = ((data || []) as any[]).map((secret) => ({
+        ...secret,
+        content: secret.encrypted_content ? decryptData(secret.encrypted_content) : secret.content,
+      }));
+      
       setSecrets((prev) => [...prev, ...newSecrets]);
       setHasMore(newSecrets.length === SECRETS_PER_PAGE);
     } catch (error) {
@@ -115,7 +117,6 @@ const Index = () => {
     }
   }, [loadingMore, hasMore, secrets.length]);
 
-  // Infinite scroll observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -138,18 +139,40 @@ const Index = () => {
     };
   }, [loadMoreSecrets, hasMore, loadingMore]);
 
-  const handleSubmitSecret = async (content: string) => {
+  const handleSubmitSecret = async (content: string, imageFile?: File | null) => {
     try {
+      let imageUrl = null;
+
+      if (imageFile) {
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('secret-images')
+          .upload(fileName, imageFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('secret-images')
+          .getPublicUrl(fileName);
+
+        imageUrl = publicUrl;
+      }
+
+      const encryptedContent = content ? encryptData(content) : null;
+
       const { error } = await (supabase as any)
         .from('secrets')
         .insert({
-          content,
+          content: content || '[imagen]',
+          encrypted_content: encryptedContent,
+          image_url: imageUrl,
+          user_id: user?.id || null,
           reactions: { turbio: 0, impresionante: 0, noMeGusta: 0 }
         });
 
       if (error) throw error;
-      
-      // The realtime subscription will add it to the list
     } catch (error) {
       console.error('Error creating secret:', error);
       toast.error('Error al publicar el secreto');
@@ -165,12 +188,10 @@ const Index = () => {
     try {
       const newReactions = { ...secret.reactions };
       
-      // Remove previous reaction
       if (currentReaction) {
         newReactions[currentReaction] = Math.max(0, newReactions[currentReaction] - 1);
       }
 
-      // Add new reaction if different
       if (currentReaction !== reaction) {
         newReactions[reaction] = newReactions[reaction] + 1;
       }
@@ -182,7 +203,6 @@ const Index = () => {
 
       if (error) throw error;
 
-      // Update local user reactions
       setUserReactions((prev) => {
         const newUserReactions = { ...prev };
         if (currentReaction === reaction) {
@@ -198,19 +218,18 @@ const Index = () => {
     }
   };
 
-  // Update secrets with user reactions
   const secretsWithReactions = secrets.map((secret) => ({
     ...secret,
     userReaction: userReactions[secret.id] || null,
   }));
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <ThemeProvider>
         <div className="min-h-screen bg-background flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Cargando secretos...</p>
+            <p className="text-muted-foreground">Cargando...</p>
           </div>
         </div>
       </ThemeProvider>
@@ -220,16 +239,29 @@ const Index = () => {
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-background relative overflow-hidden">
-        {/* Background gradient effect */}
         <div className="fixed inset-0 pointer-events-none">
-          <div 
-            className="absolute inset-0 opacity-50"
-            style={{ background: 'var(--gradient-glow)' }}
-          />
+          <div className="absolute inset-0 opacity-50" style={{ background: 'var(--gradient-glow)' }} />
         </div>
 
         <div className="relative z-10">
           <Header />
+          
+          {!user && (
+            <div className="container mx-auto px-4 py-8">
+              <div className="max-w-3xl mx-auto text-center p-6 card-gradient rounded-2xl border border-border/50">
+                <h2 className="text-2xl font-bold mb-4">¡Bienvenido a LOVISEC!</h2>
+                <p className="text-muted-foreground mb-6">
+                  Únete a nuestra comunidad anónima. Puedes publicar secretos sin cuenta, 
+                  pero con una cuenta obtienes un avatar único y nombre de usuario personalizable.
+                </p>
+                <Button onClick={() => navigate('/auth')} className="gap-2">
+                  <LogIn className="h-4 w-4" />
+                  Iniciar Sesión / Registrarse
+                </Button>
+              </div>
+            </div>
+          )}
+          
           <main className="container mx-auto pb-16">
             <SecretInput onSubmit={handleSubmitSecret} />
             <SecretFeed secrets={secretsWithReactions} onReact={handleReact} />

@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Secret, ReactionType } from '@/types/secret';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import PixelAvatar from './PixelAvatar';
+import CommentSection from './CommentSection';
 
 interface SecretCardProps {
   secret: Secret;
@@ -23,9 +25,32 @@ const SecretCard = ({ secret, onReact }: SecretCardProps) => {
   return (
     <div className="card-gradient rounded-2xl p-4 sm:p-6 border border-border/50 animate-slide-up hover:scale-[1.02] transition-all duration-300">
       <div className="relative">
-        <p className="text-foreground text-base sm:text-base leading-relaxed whitespace-pre-wrap mb-4">
-          {secret.content}
-        </p>
+        <div className="flex items-start gap-3 mb-4">
+          <div className="flex-shrink-0">
+            {secret.profile ? (
+              <PixelAvatar seed={secret.profile.avatar_seed} size={40} />
+            ) : (
+              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center text-xs">
+                Anon
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm mb-1">
+              {secret.profile?.username || 'Anónimo'}
+            </div>
+            <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap break-words">
+              {secret.content}
+            </p>
+            {secret.image_url && (
+              <img 
+                src={secret.image_url} 
+                alt="Imagen del secreto" 
+                className="mt-3 max-w-full rounded-lg max-h-96 object-cover"
+              />
+            )}
+          </div>
+        </div>
         
         <div className="flex items-center justify-between pt-4 border-t border-border/30">
           <span className="text-xs text-muted-foreground">
@@ -54,6 +79,8 @@ const SecretCard = ({ secret, onReact }: SecretCardProps) => {
             ))}
           </div>
         </div>
+
+        <CommentSection secretId={secret.id} />
       </div>
     </div>
   );
